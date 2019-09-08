@@ -1,4 +1,4 @@
-$Dashboard = New-UDDashboard -Title "System Information Dashboard" -NavBarColor Green -Content {
+$Page1 = New-UDPage -Name "Home" -Icon home -Content {
     New-UdRow {
         New-UdColumn -Size 12 -Content {
             New-UdTable -Title "Server Information" -Headers @(" ", " ") -Endpoint {
@@ -14,12 +14,13 @@ $Dashboard = New-UDDashboard -Title "System Information Dashboard" -NavBarColor 
     New-UDRow {
         New-UDColumn -LargeSize 4 -Content {
             New-UdMonitor -Title "Localhost - CPU (% processor time)" -Type Line -DataPointHistory 20 -RefreshInterval 5 -ChartBackgroundColor '#80FF6B63' -ChartBorderColor '#FFFF6B63'  -Endpoint {
-                Get-Counter '\Processor(_Total)\% Processor Time' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CounterSamples | Select-Object -ExpandProperty CookedValue | Out-UDMonitorData
+                $proc = Get-CimInstance win32_processor
+                $proc.LoadPercentage | Out-UDMonitorData
             }
 
         }
         New-UDColumn -LargeSize 4 -Content {
-            New-UdMonitor -Title "LocalHost - Memory Available %" -Type Line -DataPointHistory 20 -RefreshInterval 60 -ChartBackgroundColor '#80FF6B63' -ChartBorderColor '#FFFF6B63'  -Endpoint {
+            New-UdMonitor -Title "LocalHost - Memory Available %" -Type Line -DataPointHistory 20 -RefreshInterval 5 -ChartBackgroundColor '#80FF6B63' -ChartBorderColor '#FFFF6B63'  -Endpoint {
                 $os = Get-Ciminstance Win32_OperatingSystem
                 $pctFree = [math]::Round(($os.FreePhysicalMemory/$os.TotalVisibleMemorySize)*100,2)
                 $pctFree | Out-UDMonitorData
@@ -27,14 +28,16 @@ $Dashboard = New-UDDashboard -Title "System Information Dashboard" -NavBarColor 
             }
         }
         New-UDColumn -LargeSize 4 -Content {
-            New-UdMonitor -Title "LocalHost - Memory in use %" -Type Line -DataPointHistory 20 -RefreshInterval 30 -ChartBackgroundColor '#80FF6B63' -ChartBorderColor '#FFFF6B63'  -Endpoint {
+            New-UdMonitor -Title "LocalHost - Memory in use %" -Type Line -DataPointHistory 20 -RefreshInterval 5 -ChartBackgroundColor '#80FF6B63' -ChartBorderColor '#FFFF6B63'  -Endpoint {
                 $os = Get-Ciminstance Win32_OperatingSystem
                 $pctFree = [math]::Round(($os.FreePhysicalMemory/$os.TotalVisibleMemorySize)*100,2)
                 (100-$pctFree) | Out-UDMonitorData
             }
         }
-        New-UDColumn -LargeSize 4 -Content { }
     } 
+}
+
+$Page2 = New-UDPage -Name "Network" -Icon network_wired -Content {
     New-UDRow {
         New-UDColumn -LargeSize 4 -Content {
             New-UdMonitor -Title "Network received Kbps" -Type Line -DataPointHistory 20 -RefreshInterval 5 -ChartBackgroundColor '#80FF6B63' -ChartBorderColor '#FFFF6B63'  -Endpoint {
@@ -56,6 +59,9 @@ $Dashboard = New-UDDashboard -Title "System Information Dashboard" -NavBarColor 
             }
         }
     }
+}
+
+$Page3 = New-UDPage -Name "Details" -Icon desktop -Content {
     New-UdRow {
         New-UdColumn -Size 3 -Content {
             New-UdChart -Title "Memory by Process" -Type Doughnut -RefreshInterval 5 -Endpoint {
@@ -94,6 +100,9 @@ $Dashboard = New-UDDashboard -Title "System Information Dashboard" -NavBarColor 
             }
         }
     }
+}
+
+$Page4 = New-UDPage -Name "Disk" -Icon diagnoses -Content {
     New-UdRow {
         New-UdColumn -Size 6 -Content {
             New-UdChart -Title "Disk Space by Drive" -Type Bar -AutoRefresh -Endpoint {
@@ -106,17 +115,10 @@ $Dashboard = New-UDDashboard -Title "System Information Dashboard" -NavBarColor 
                 )
             }
         }
-        New-UdColumn -Size 6 -Content {
-            New-UdMonitor -Title "Disk (% disk time)" -Type Line -DataPointHistory 20 -RefreshInterval 5 -ChartBackgroundColor '#80E8611D' -ChartBorderColor '#FFE8611D'  -Endpoint {
-                try {
-                    Get-Counter '\physicaldisk(_total)\% disk time' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CounterSamples | Select-Object -ExpandProperty CookedValue | Out-UDMonitorData
-                }
-                catch {
-                    0 | Out-UDMonitorData
-                }
-            }
-        }
     }
+}
+
+$Page5 = New-UDPage -Name "All bits" -Icon diagnoses -Content {
     New-UdRow {
         New-UdColumn -Size 12 {
             New-UdGrid -Title "Processes" -Headers @("Name", "% CPU TIme") -Properties @("Name", "PercentProcessorTime") -NoExport -NoFilter -AutoRefresh -RefreshInterval 10 -Endpoint {
@@ -150,7 +152,7 @@ $Dashboard = New-UDDashboard -Title "System Information Dashboard" -NavBarColor 
     New-UdRow {
         New-UdColumn -Size 12 {
             New-UdGrid -Title "Stopped service where mode=automatic and not delayed and triggered" -Headers @("Name", "State") -Properties @("DisplayName", "State") -NoExport -NoFilter -AutoRefresh -RefreshInterval 10 -Endpoint {
-                Get-WmiObject -Class Win32_Service -Filter {State != 'Running' and StartMode = 'Auto'} | ForEach-Object {
+                Get-CimInstance -Class Win32_Service -Filter "State != 'Running' and StartMode = 'Auto'" | ForEach-Object {
                     [PSCustomObject]@{ 
                         DisplayName = $_.DisplayName;
                         Name = $_.Name;
@@ -163,9 +165,62 @@ $Dashboard = New-UDDashboard -Title "System Information Dashboard" -NavBarColor 
             }
         }
     }
+}
 
-    New-UDColumn -LargeSize 4 -Content { }
-} 
+$Page6 = New-UDPage -Name "PiHole" -Icon dashcube -Content {
+    New-UdRow {
+        New-UdColumn -Size 2 -Content {
+            New-UDCounter -Title "Domains Blocked" -AutoRefresh -RefreshInterval 5 -Icon biohazard  -Endpoint {
+                (Invoke-RestMethod -Uri "http://pi.hole/admin/api.php?auth=2948d40720bfbbee4c632c3ad31b4e7a63412bfe06a0915e42d0c656e1ebca18&summaryRaw").domains_being_blocked
+            }
+        }
+        New-UdColumn -Size 2 -Content {
+            New-UDCounter -Title "DNS Queries Today" -AutoRefresh -RefreshInterval 5 -Icon question_circle -Endpoint {
+                (Invoke-RestMethod -Uri "http://pi.hole/admin/api.php?auth=2948d40720bfbbee4c632c3ad31b4e7a63412bfe06a0915e42d0c656e1ebca18&summaryRaw").dns_queries_today
+            }
+        }
+        New-UdColumn -Size 2 -Content {
+            New-UDCounter -Title "Ads Blocked Today" -AutoRefresh -RefreshInterval 5 -Icon ad -Endpoint {
+                (Invoke-RestMethod -Uri "http://pi.hole/admin/api.php?auth=2948d40720bfbbee4c632c3ad31b4e7a63412bfe06a0915e42d0c656e1ebca18&summaryRaw").ads_blocked_today
+            }
+        }
+        New-UdColumn -Size 2 -Content {
+            New-UDCounter -Title "Unique Domains" -AutoRefresh -RefreshInterval 5 -Icon user_ninja -Endpoint {
+                (Invoke-RestMethod -Uri "http://pi.hole/admin/api.php?auth=2948d40720bfbbee4c632c3ad31b4e7a63412bfe06a0915e42d0c656e1ebca18&summaryRaw").unique_domains
+            }
+        }
+        New-UdColumn -Size 2 -Content {
+            New-UDCounter -Title "Queries Forwarded" -AutoRefresh -RefreshInterval 5 -Icon wind -Endpoint {
+                (Invoke-RestMethod -Uri "http://pi.hole/admin/api.php?auth=2948d40720bfbbee4c632c3ad31b4e7a63412bfe06a0915e42d0c656e1ebca18&summaryRaw").queries_forwarded
+            }
+        }
+        New-UdColumn -Size 2 -Content {
+            New-UDCounter -Title "Queries Cached" -AutoRefresh -RefreshInterval 5 -Icon undo -Endpoint {
+                (Invoke-RestMethod -Uri "http://pi.hole/admin/api.php?auth=2948d40720bfbbee4c632c3ad31b4e7a63412bfe06a0915e42d0c656e1ebca18&summaryRaw").queries_cached
+            }
+        }
+    }
+    New-UdRow {
+        New-UdColumn -Size 2 -Content {
+            New-UDCounter -Title "Clients ever seen" -AutoRefresh -RefreshInterval 5 -Icon user_friends -Endpoint {
+                (Invoke-RestMethod -Uri "http://pi.hole/admin/api.php?auth=2948d40720bfbbee4c632c3ad31b4e7a63412bfe06a0915e42d0c656e1ebca18&summaryRaw").clients_ever_seen
+            }
+        }
+        New-UdColumn -Size 2 -Content {
+            New-UDCounter -Title "Unique clients" -AutoRefresh -RefreshInterval 5 -Icon user_secret -Endpoint {
+                (Invoke-RestMethod -Uri "http://pi.hole/admin/api.php?auth=2948d40720bfbbee4c632c3ad31b4e7a63412bfe06a0915e42d0c656e1ebca18&summaryRaw").unique_clients
+            }
+        }
+        New-UdColumn -Size 2 -Content {
+            New-UDCounter -Title "DNS Queries all types" -AutoRefresh -RefreshInterval 5 -Icon universal_access -Endpoint {
+                (Invoke-RestMethod -Uri "http://pi.hole/admin/api.php?auth=2948d40720bfbbee4c632c3ad31b4e7a63412bfe06a0915e42d0c656e1ebca18&summaryRaw").dns_queries_all_types
+            }
+        }
+    }
+}
+
+
+$Dashboard = New-UDDashboard -Title "System Information Dashboard" -NavBarColor Green -Pages @($Page1, $Page2, $Page3, $Page4, $Page5, $Page6)
 
 
 Get-UDDashboard | Stop-UDDashboard
